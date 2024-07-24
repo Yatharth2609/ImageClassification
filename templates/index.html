@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Classification</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .container {
+            background-color: #fff;
+            border-radius: 5px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #image-form {
+            margin-bottom: 20px;
+        }
+        #image-input {
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: #3498db;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #result, #accuracy, #model-status {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        #preview {
+            max-width: 100%;
+            margin-top: 20px;
+        }
+        #confidence-bar {
+            width: 100%;
+            background-color: #e0e0e0;
+            margin-top: 10px;
+        }
+        #confidence-fill {
+            height: 20px;
+            background-color: #2ecc71;
+            width: 0;
+            transition: width 0.5s ease-in-out;
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Image Classification</h1>
+        <form id="image-form">
+            <input type="file" id="image-input" name="image" accept="image/*">
+            <br>
+            <button type="submit">Classify Image</button>
+        </form>
+        <img id="preview" style="display: none;">
+        <div id="result"></div>
+        <div id="confidence-bar"><div id="confidence-fill"></div></div>
+        <div id="accuracy"></div>
+        <div id="model-status"></div>
+        <button id="evaluate-btn">Evaluate Model</button>
+        <button id="save-model-btn">Save Model</button>
+        <button id="load-model-btn">Load Model</button>
+        <h2>Training History</h2>
+        <canvas id="historyChart"></canvas>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            function displayImage(file) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    $('#preview').attr('src', e.target.result).show();
+                }
+                reader.readAsDataURL(file);
+            }
+
+            $('#image-input').on('change', function(e) {
+                displayImage(e.target.files[0]);
+            });
+
+            $('#image-form').on('submit', function(e) {
+                e.preventDefault();
+                var formData = new FormData(this);
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    formData.append('image', e.target.result);
+                    $.ajax({
+                        url: '/predict',
+                        data: formData,
+                        type: 'POST',
+                        contentType: false,
+                        processData: false,
+                        success: function(response) {
+                            $('#result').text('Predicted class: ' + response.class);
+                            $('#confidence-fill').css('width', (response.confidence * 100) + '%');
+                            $('#result').append('<br>Confidence: ' + (response.confidence * 100).toFixed(2) + '%');
+                        },
+                        error: function(error) {
+                            console.log(error);
+                        }
+                    });
+                }
+                reader.readAsDataURL($('#image-input')[0].files[0]);
+            });
+
+            $('#evaluate-btn').on('click', function() {
+                $.get('/evaluate', function(data) {
+                    $('#accuracy').text('Model Accuracy: ' + (data.accuracy * 100).toFixed(2) + '%');
+                });
+            });
+
+            $('#save-model-btn').on('click', function() {
+                $.post('/save_model', function(data) {
+                    $('#model-status').text(data.message);
+                });
+            });
+
+            $('#load-model-btn').on('click', function() {
+                $.post('/load_model', function(data) {
+                    $('#model-status').text(data.message);
+                });
+            });
+
+            $.get('/training_history', function(data) {
+                var ctx = document.getElementById('historyChart').getContext('2d');
+                var chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: Array.from({length: data.accuracy.length}, (_, i) => i + 1),
+                        datasets: [{
+                            label: 'Training Accuracy',
+                            data: data.accuracy,
+                            borderColor: 'rgb(75, 192, 192)',
+                            tension: 0.1
+                        }, {
+                            label: 'Validation Accuracy',
+                            data: data.val_accuracy,
+                            borderColor: 'rgb(255, 99, 132)',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
